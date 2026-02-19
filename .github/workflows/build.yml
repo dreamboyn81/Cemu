@@ -1,14 +1,6 @@
 name: Build Cemu
 
-on:
-  workflow_call:
-    inputs:
-      next_version_major:
-        required: false
-        type: string
-      next_version_minor:
-        required: false
-        type: string
+on: [push, pull_request]
 
 env:
   VCPKG_ROOT: "${{github.workspace}}/dependencies/vcpkg"
@@ -43,10 +35,10 @@ jobs:
           echo "Build mode is release"
 
       - name: Setup build flags for version
-        if: ${{ inputs.next_version_major != '' }}
         run: |
-          echo "[INFO] Version ${{ inputs.next_version_major }}.${{ inputs.next_version_minor }}"
-          echo "BUILD_FLAGS=${{ env.BUILD_FLAGS }} -DEMULATOR_VERSION_MAJOR=${{ inputs.next_version_major }} -DEMULATOR_VERSION_MINOR=${{ inputs.next_version_minor }}" >> $GITHUB_ENV
+          # 您可以在此處設定預設版本號，或從環境變數、標籤等處動態獲取
+          # 例如：echo "BUILD_FLAGS=${{ env.BUILD_FLAGS }} -DEMULATOR_VERSION_MAJOR=2 -DEMULATOR_VERSION_MINOR=0" >> $GITHUB_ENV
+          echo "BUILD_FLAGS=${{ env.BUILD_FLAGS }}" >> $GITHUB_ENV
 
       - name: "Install system dependencies"
         run: |
@@ -129,10 +121,10 @@ jobs:
           echo "Build mode is release"
 
       - name: Setup build flags for version
-        if: ${{ inputs.next_version_major != '' }}
         run: |
-          echo "[INFO] Version ${{ inputs.next_version_major }}.${{ inputs.next_version_minor }}"
-          echo "BUILD_FLAGS=${{ env.BUILD_FLAGS }} -DEMULATOR_VERSION_MAJOR=${{ inputs.next_version_major }} -DEMULATOR_VERSION_MINOR=${{ inputs.next_version_minor }}" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          # 設定 Windows 構建的預設版本號
+          # echo "BUILD_FLAGS=${{ env.BUILD_FLAGS }} -DEMULATOR_VERSION_MAJOR=2 -DEMULATOR_VERSION_MINOR=0" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          echo "BUILD_FLAGS=${{ env.BUILD_FLAGS }}" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: "Setup cmake"
         uses: jwlawson/actions-setup-cmake@v2
@@ -164,7 +156,8 @@ jobs:
         shell: cmd
         run: |
           cd src\resource
-          makensis /DPRODUCT_VERSION=${{ inputs.next_version_major }}.${{ inputs.next_version_minor }} installer.nsi
+          # 使用預設或從環境獲取的版本號
+          makensis /DPRODUCT_VERSION=2.0 installer.nsi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -176,7 +169,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cemu-installer-windows-x64
-          path: ./src/resource/cemu-${{ inputs.next_version_major }}.${{ inputs.next_version_minor }}-windows-x64-installer.exe
+          path: ./src/resource/cemu-2.0-windows-x64-installer.exe
 
   build-macos:
     runs-on: macos-14
@@ -196,10 +189,10 @@ jobs:
           echo "Build mode is release"
 
       - name: Setup build flags for version
-        if: ${{ inputs.next_version_major != '' }}
         run: |
-          echo "[INFO] Version ${{ inputs.next_version_major }}.${{ inputs.next_version_minor }}"
-          echo "BUILD_FLAGS=${{ env.BUILD_FLAGS }} -DEMULATOR_VERSION_MAJOR=${{ inputs.next_version_major }} -DEMULATOR_VERSION_MINOR=${{ inputs.next_version_minor }}" >> $GITHUB_ENV
+          # 設定 macOS 構建的預設版本號
+          # echo "BUILD_FLAGS=${{ env.BUILD_FLAGS }} -DEMULATOR_VERSION_MAJOR=2 -DEMULATOR_VERSION_MINOR=0" >> $GITHUB_ENV
+          echo "BUILD_FLAGS=${{ env.BUILD_FLAGS }}" >> $GITHUB_ENV
 
       - name: "Install system dependencies"
         run: |
@@ -291,10 +284,30 @@ jobs:
           ANDROID_STORE_FILE_BASE64: ${{ secrets.ANDROID_STORE_FILE_BASE64 }}
           ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          EMULATOR_VERSION_MAJOR: ${{ inputs.next_version_major }}
-          EMULATOR_VERSION_MINOR: ${{ inputs.next_version_minor }}
+          # 設定 Android 構建的預設版本號
+          EMULATOR_VERSION_MAJOR: 2
+          EMULATOR_VERSION_MINOR: 0
         run: |
           export JAVA_HOME=$JAVA_HOME_21_X64
+
+          cd ./src/android
+
+          if [[ -n "$ANDROID_STORE_FILE_BASE64" ]]; then
+            base64 --decode <<< "${ANDROID_STORE_FILE_BASE64}" > store.jks
+            export ANDROID_STORE_FILE=$(pwd)/store.jks
+            echo "Android signing store file has been set up."
+          else
+            echo "No Android signing store file provided. The APK will not be signed with a release key."
+          fi
+
+          ./gradlew assembleRelease
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cemu-bin-android
+          path: ./src/android/app/build/outputs/apk/*/*.apk
+        export JAVA_HOME=$JAVA_HOME_21_X64
 
           cd ./src/android
 
